@@ -1,0 +1,133 @@
+#include <Wire.h>
+#include <hd44780.h>
+#include <hd44780ioClass/hd44780_I2Cexp.h>
+#include <SoftwareSerial.h>
+
+SoftwareSerial GsmSerial(8, 9);
+
+const int buttonYesPin = 2;
+const int buttonNoPin = 3;
+const int buttonEmergencyPin = 4;
+const int buttonCallPin = 5;
+String phoneNumber = "+9181814.....";
+
+void SEND_SMS(String num, String message) {
+  Serial.println("Sending SMS...");
+  GsmSerial.println("AT+CMGF=1");
+  delay(1000);
+
+  GsmSerial.print("AT+CMGS=\"");
+  GsmSerial.print(num);
+  GsmSerial.println("\"");
+  delay(1000);
+
+  GsmSerial.print(message);
+  delay(100);
+  GsmSerial.write(26);  // CTRL+Z to send the message
+  delay(3000);
+
+  Serial.println("SMS Sent : " + message);
+  lcd.clear();
+  lcd.print("SMS Sent :");
+  lcd.setCursor(0, 1);
+  lcd.print(message);
+}
+void MAKE_CALL(String num) {
+  Serial.println("Making a call...");
+  GsmSerial.print("ATD");
+  GsmSerial.print(num);
+  GsmSerial.println(";");
+  delay(1000);
+  lcd.clear();
+  lcd.print("Calling : ");
+  lcd.setCursor(0, 1);
+  lcd.print(num);
+}
+
+bool initializeGSM() {
+  Serial.println("Initializing GSM...");
+  GsmSerial.println("AT");
+  delay(1000);
+  if (GsmSerial.find("OK")) {
+    Serial.println("GSM Ready.");
+    lcd.clear();
+    lcd.print("GSM Ready");
+    delay(2000);
+    return true;
+  } else {
+    Serial.println("GSM Initialization Failed!");
+    lcd.clear();
+    lcd.print("GSM Fail");
+    delay(2000);
+    return false;
+  }
+}
+
+void READ_SMS() {
+  if (GsmSerial.available()) {
+    String incomingData = "";
+while (GsmSerial.available()) {
+  char c = GsmSerial.read();
+  incomingData += c;
+  delay(10);
+}
+
+Serial.println("Incoming SMS Data : ");
+Serial.println(incomingData);
+
+if (incomingData.indexOf("+CMT:") != -1) {
+  int senderStart = incomingData.indexOf("\"") + 1;
+  int senderEnd = incomingData.indexOf("\"", senderStart);
+  String sender = incomingData.substring(senderStart, senderEnd);
+
+  int messageStart = incomingData.indexOf("\n", senderEnd) + 1;
+  String message = incomingData.substring(messageStart);
+  message.trim();
+
+  Serial.println("Sender: " + sender);
+  Serial.println("Message: " + message);
+
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Sender: " + sender.substring(0, 13));
+  lcd.setCursor(0, 1);
+  lcd.print(message.substring(0, 16));
+}
+
+void loop() {
+  READ_SMS();
+
+  if (digitalRead(buttonYesPin) == LOW) {
+    delay(50);
+    if (digitalRead(buttonYesPin) == LOW) {
+      SEND_SMS(phoneNumber, "Yes");
+      while (digitalRead(buttonYesPin) == LOW);
+    }
+}
+if (digitalRead(buttonNoPin) == LOW) {
+  delay(50); // Debounce delay
+  if (digitalRead(buttonNoPin) == LOW) {
+    SEND_SMS(phoneNumber, "No");
+    while (digitalRead(buttonNoPin) == LOW);
+  }
+}
+
+if (digitalRead(buttonEmergencyPin) == LOW) {
+  delay(50);
+  if (digitalRead(buttonEmergencyPin) == LOW) {
+    SEND_SMS(phoneNumber, "Emergency");
+    lcd.clear();
+    lcd.print("Emergency Sent ");
+    delay(2000);
+    while (digitalRead(buttonEmergencyPin) == LOW);
+  }
+}
+
+if (digitalRead(buttonCallPin) == LOW) {
+  delay(50);
+  if (digitalRead(buttonCallPin) == LOW) {
+    MAKE_CALL(phoneNumber);
+    while (digitalRead(buttonCallPin) == LOW);
+  }
+}
+}
